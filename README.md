@@ -6,8 +6,7 @@
 
 A beautiful, premium Islamic Prayer Tracker & Digital Tasbeeh application built with Flutter. It follows Clean Architecture principles, uses Signals for reactive state management, and stores data locally using Isar database for a fast, offline-first experience.
 
-[Download APK](https://github.com/ImBasit-ali/Prayer-Tracker/blob/main/assets/Qibla.apk)
----
+[![Download APK](https://img.shields.io/badge/Download-APK-green?style=for-the-badge&logo=android)](https://raw.githubusercontent.com/ImBasit-ali/Prayer-Tracker/main/assets/Qibla.apk)---
 
 ## ✨ Features
 
