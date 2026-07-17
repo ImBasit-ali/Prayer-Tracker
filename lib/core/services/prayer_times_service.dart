@@ -1,195 +1,75 @@
-import 'package:adhan/adhan.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../logging/logger.dart';
 
-/// Prayer times calculation service using Adhan library
+/// Prayer times service managing manual configurations
 class PrayerTimesService {
   static final PrayerTimesService _instance = PrayerTimesService._internal();
   factory PrayerTimesService() => _instance;
   PrayerTimesService._internal();
 
-  // Storage keys
-  static const String _keyLatitude = 'prayer_times_latitude';
-  static const String _keyLongitude = 'prayer_times_longitude';
-  static const String _keyCalculationMethod = 'prayer_times_calc_method';
-  static const String _keyLocationName = 'prayer_times_location_name';
+  // Storage keys for manual times
+  static const String keyManualFajr = 'manual_prayer_fajr';
+  static const String keyManualDhuhr = 'manual_prayer_dhuhr';
+  static const String keyManualAsr = 'manual_prayer_asr';
+  static const String keyManualMaghrib = 'manual_prayer_maghrib';
+  static const String keyManualIsha = 'manual_prayer_isha';
 
-  /// Get current location
-  Future<Position?> getCurrentLocation() async {
-    try {
-      // Check if location services are enabled
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        logger.info('Location services are disabled');
-        return null;
-      }
-
-      // Check location permissions
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          logger.info('Location permission denied');
-          return null;
-        }
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        logger.info('Location permission denied forever');
-        return null;
-      }
-
-      // Get current position
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.low,
-        ),
-      );
-
-      logger.info('Got location: ${position.latitude}, ${position.longitude}');
-
-      // Save location
-      await saveLocation(position.latitude, position.longitude);
-
-      return position;
-    } catch (e, stackTrace) {
-      logger.error(
-        'Failed to get current location',
-        error: e,
-        stackTrace: stackTrace,
-      );
-      return null;
-    }
-  }
-
-  /// Save location to storage
-  Future<void> saveLocation(
-    double latitude,
-    double longitude, [
-    String? locationName,
-  ]) async {
+  /// Get manual time string (HH:mm)
+  Future<String> getManualTime(String key, String defaultTime) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_keyLatitude, latitude);
-    await prefs.setDouble(_keyLongitude, longitude);
-    if (locationName != null) {
-      await prefs.setString(_keyLocationName, locationName);
-    }
-    logger.info('Saved location: $latitude, $longitude');
+    return prefs.getString(key) ?? defaultTime;
   }
 
-  /// Get saved location
-  Future<Coordinates?> getSavedLocation() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final lat = prefs.getDouble(_keyLatitude);
-      final lng = prefs.getDouble(_keyLongitude);
-
-      if (lat != null && lng != null) {
-        return Coordinates(lat, lng);
-      }
-      return null;
-    } catch (e) {
-      logger.error('Failed to get saved location', error: e);
-      return null;
-    }
-  }
-
-  /// Get saved location name
-  Future<String?> getSavedLocationName() async {
+  /// Save manual time string (HH:mm)
+  Future<void> saveManualTime(String key, String timeStr) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyLocationName);
+    await prefs.setString(key, timeStr);
+    logger.info('Saved manual time: $key = $timeStr');
   }
 
-  /// Save calculation method
-  Future<void> saveCalculationMethod(String method) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyCalculationMethod, method);
-    logger.info('Saved calculation method: $method');
-  }
+  /// Get manual prayer times map for a specific date
+  Future<Map<String, DateTime>> getManualPrayerTimesForDate(DateTime date) async {
+    final fajrStr = await getManualTime(keyManualFajr, '05:00');
+    final dhuhrStr = await getManualTime(keyManualDhuhr, '12:30');
+    final asrStr = await getManualTime(keyManualAsr, '15:45');
+    final maghribStr = await getManualTime(keyManualMaghrib, '19:00');
+    final ishaStr = await getManualTime(keyManualIsha, '20:30');
 
-  /// Get saved calculation method
-  Future<String> getCalculationMethod() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyCalculationMethod) ?? 'MuslimWorldLeague';
-  }
-
-  /// Get calculation parameters based on method name
-  CalculationParameters getCalculationParameters(String method) {
-    switch (method) {
-      case 'MuslimWorldLeague':
-        return CalculationMethod.muslim_world_league.getParameters();
-      case 'Egyptian':
-        return CalculationMethod.egyptian.getParameters();
-      case 'Karachi':
-        return CalculationMethod.karachi.getParameters();
-      case 'UmmAlQura':
-        return CalculationMethod.umm_al_qura.getParameters();
-      case 'Dubai':
-        return CalculationMethod.dubai.getParameters();
-      case 'Qatar':
-        return CalculationMethod.qatar.getParameters();
-      case 'Kuwait':
-        return CalculationMethod.kuwait.getParameters();
-      case 'MoonsightingCommittee':
-        return CalculationMethod.moon_sighting_committee.getParameters();
-      case 'Singapore':
-        return CalculationMethod.singapore.getParameters();
-      case 'NorthAmerica':
-        return CalculationMethod.north_america.getParameters();
-      case 'Tehran':
-        return CalculationMethod.tehran.getParameters();
-      default:
-        return CalculationMethod.muslim_world_league.getParameters();
+    DateTime parseTime(String timeStr) {
+      final parts = timeStr.split(':');
+      final hour = int.parse(parts[0]);
+      final minute = int.parse(parts[1]);
+      return DateTime(date.year, date.month, date.day, hour, minute);
     }
+
+    final fajr = parseTime(fajrStr);
+    final dhuhr = parseTime(dhuhrStr);
+    final asr = parseTime(asrStr);
+    final maghrib = parseTime(maghribStr);
+    final isha = parseTime(ishaStr);
+    
+    // Mock sunrise as 1.5 hours after Fajr
+    final sunrise = fajr.add(const Duration(minutes: 90));
+
+    return {
+      'fajr': fajr,
+      'sunrise': sunrise,
+      'dhuhr': dhuhr,
+      'asr': asr,
+      'maghrib': maghrib,
+      'isha': isha,
+    };
   }
 
   /// Calculate prayer times for today
   Future<Map<String, DateTime>?> getTodayPrayerTimes() async {
     try {
-      // Get location (saved or current)
-      Coordinates? coordinates = await getSavedLocation();
-
-      if (coordinates == null) {
-        final position = await getCurrentLocation();
-        if (position == null) {
-          logger.info('No location available for prayer times. Using default coordinates (Makkah).');
-          // Default fallback coordinates for Makkah, Saudi Arabia
-          coordinates = Coordinates(21.3891, 39.8579);
-        } else {
-          coordinates = Coordinates(position.latitude, position.longitude);
-        }
-      }
-
-      // Get calculation method
-      final methodName = await getCalculationMethod();
-      final params = getCalculationParameters(methodName);
-
-      // Calculate prayer times
-      final date = DateTime.now();
-      final dateComponents = DateComponents(date.year, date.month, date.day);
-      final prayerTimes = PrayerTimes(coordinates, dateComponents, params);
-
-      final times = {
-        'fajr': prayerTimes.fajr,
-        'sunrise': prayerTimes.sunrise,
-        'dhuhr': prayerTimes.dhuhr,
-        'asr': prayerTimes.asr,
-        'maghrib': prayerTimes.maghrib,
-        'isha': prayerTimes.isha,
-      };
-
-      logger.info('Calculated prayer times for ${date.toString()}');
-      logger.debug('Fajr: ${times['fajr']}');
-      logger.debug('Dhuhr: ${times['dhuhr']}');
-      logger.debug('Asr: ${times['asr']}');
-      logger.debug('Maghrib: ${times['maghrib']}');
-      logger.debug('Isha: ${times['isha']}');
-
+      final times = await getManualPrayerTimesForDate(DateTime.now());
+      logger.info('Calculated manual prayer times for today');
       return times;
     } catch (e, stackTrace) {
       logger.error(
-        'Failed to calculate prayer times',
+        'Failed to calculate manual prayer times',
         error: e,
         stackTrace: stackTrace,
       );
@@ -200,57 +80,14 @@ class PrayerTimesService {
   /// Calculate prayer times for a specific date
   Future<Map<String, DateTime>?> getPrayerTimesForDate(DateTime date) async {
     try {
-      Coordinates? coordinates = await getSavedLocation();
-
-      if (coordinates == null) {
-        final position = await getCurrentLocation();
-        if (position == null) {
-          logger.info('No location available for prayer times on $date. Using default coordinates (Makkah).');
-          // Default fallback coordinates for Makkah, Saudi Arabia
-          coordinates = Coordinates(21.3891, 39.8579);
-        } else {
-          coordinates = Coordinates(position.latitude, position.longitude);
-        }
-      }
-
-      final methodName = await getCalculationMethod();
-      final params = getCalculationParameters(methodName);
-
-      final dateComponents = DateComponents(date.year, date.month, date.day);
-      final prayerTimes = PrayerTimes(coordinates, dateComponents, params);
-
-      return {
-        'fajr': prayerTimes.fajr,
-        'sunrise': prayerTimes.sunrise,
-        'dhuhr': prayerTimes.dhuhr,
-        'asr': prayerTimes.asr,
-        'maghrib': prayerTimes.maghrib,
-        'isha': prayerTimes.isha,
-      };
+      return await getManualPrayerTimesForDate(date);
     } catch (e, stackTrace) {
       logger.error(
-        'Failed to calculate prayer times for date',
+        'Failed to calculate manual prayer times for date',
         error: e,
         stackTrace: stackTrace,
       );
       return null;
     }
-  }
-
-  /// Get available calculation methods
-  List<Map<String, String>> getAvailableMethods() {
-    return [
-      {'id': 'MuslimWorldLeague', 'name': 'Muslim World League'},
-      {'id': 'Egyptian', 'name': 'Egyptian General Authority'},
-      {'id': 'Karachi', 'name': 'University of Islamic Sciences, Karachi'},
-      {'id': 'UmmAlQura', 'name': 'Umm Al-Qura University, Makkah'},
-      {'id': 'Dubai', 'name': 'Dubai'},
-      {'id': 'Qatar', 'name': 'Qatar'},
-      {'id': 'Kuwait', 'name': 'Kuwait'},
-      {'id': 'MoonsightingCommittee', 'name': 'Moonsighting Committee'},
-      {'id': 'Singapore', 'name': 'Singapore'},
-      {'id': 'NorthAmerica', 'name': 'Islamic Society of North America (ISNA)'},
-      {'id': 'Tehran', 'name': 'Institute of Geophysics, University of Tehran'},
-    ];
   }
 }

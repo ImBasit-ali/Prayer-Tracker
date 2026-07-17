@@ -39,10 +39,7 @@ dependencies:
   flutter_local_notifications: ^18.0.1
   timezone: ^0.10.0
   flutter_timezone: ^4.1.1
-  # Prayer Times Calculation
-  adhan: ^2.0.0
-  geolocator: ^13.0.2
-  permission_handler: ^11.3.1
+
 
   # Settings Storage
   shared_preferences: ^2.3.5

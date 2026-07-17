@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:muslim_prayer_tracker/presentation/screens/prayer_history_screen.dart';
 import 'prayer_screen.dart';
 import 'tasbeeh_screen.dart';
 import 'settings_screen.dart';
@@ -13,8 +14,10 @@ class HomeScreen extends HookWidget {
     final currentIndex = useState(0);
 
     final screens = [
+     
       const PrayerScreen(),
       const TasbeehScreen(),
+      const PrayerHistoryScreen(),
       const SettingsScreen(),
     ];
 
@@ -35,6 +38,11 @@ class HomeScreen extends HookWidget {
             icon: Icon(Icons.auto_awesome_outlined),
             selectedIcon: Icon(Icons.auto_awesome),
             label: 'Tasbeeh',
+          ),
+           NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history),
+            label: 'History',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),

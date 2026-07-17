@@ -3,7 +3,6 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/prayer_times_service.dart';
-import 'prayer_history_screen.dart';
 
 /// Settings screen for app configuration
 class SettingsScreen extends HookWidget {
@@ -12,9 +11,11 @@ class SettingsScreen extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final notificationsEnabled = useState(false);
-    final calculationMethod = useState('MuslimWorldLeague');
-    final locationName = useState<String?>(null);
-    final isLoading = useState(false);
+    final fajrTime = useState('05:00');
+    final dhuhrTime = useState('12:30');
+    final asrTime = useState('15:45');
+    final maghribTime = useState('19:00');
+    final ishaTime = useState('20:30');
 
     // Load settings on mount
     useEffect(() {
@@ -22,9 +23,13 @@ class SettingsScreen extends HookWidget {
         final prefs = await SharedPreferences.getInstance();
         notificationsEnabled.value =
             prefs.getBool('notifications_enabled') ?? false;
-        calculationMethod.value = await PrayerTimesService()
-            .getCalculationMethod();
-        locationName.value = await PrayerTimesService().getSavedLocationName();
+
+        final service = PrayerTimesService();
+        fajrTime.value = await service.getManualTime(PrayerTimesService.keyManualFajr, '05:00');
+        dhuhrTime.value = await service.getManualTime(PrayerTimesService.keyManualDhuhr, '12:30');
+        asrTime.value = await service.getManualTime(PrayerTimesService.keyManualAsr, '15:45');
+        maghribTime.value = await service.getManualTime(PrayerTimesService.keyManualMaghrib, '19:00');
+        ishaTime.value = await service.getManualTime(PrayerTimesService.keyManualIsha, '20:30');
       }
 
       loadSettings();
@@ -73,38 +78,29 @@ class SettingsScreen extends HookWidget {
       }
     }
 
-    Future<void> updateCalculationMethod(String method) async {
-      await PrayerTimesService().saveCalculationMethod(method);
-      calculationMethod.value = method;
+    Future<void> pickPrayerTime(String prayerKey, ValueNotifier<String> timeState) async {
+      final currentParts = timeState.value.split(':');
+      final currentTime = TimeOfDay(
+        hour: int.parse(currentParts[0]),
+        minute: int.parse(currentParts[1]),
+      );
 
-      // Reschedule notifications if enabled
-      if (notificationsEnabled.value) {
-        final prayerTimes = await PrayerTimesService().getTodayPrayerTimes();
-        if (prayerTimes != null) {
-          await NotificationService().cancelAllNotifications();
-          await NotificationService().scheduleAllPrayers(prayerTimes);
-        }
-      }
+      final selected = await showTimePicker(
+        context: context,
+        initialTime: currentTime,
+      );
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Calculation method updated to: $method')),
-        );
-      }
-    }
-
-    Future<void> updateLocation() async {
-      isLoading.value = true;
-
-      final position = await PrayerTimesService().getCurrentLocation();
-
-      if (position != null) {
-        locationName.value =
-            'GPS: ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}';
+      if (selected != null) {
+        final formattedTime =
+            '${selected.hour.toString().padLeft(2, '0')}:${selected.minute.toString().padLeft(2, '0')}';
+        
+        final service = PrayerTimesService();
+        await service.saveManualTime(prayerKey, formattedTime);
+        timeState.value = formattedTime;
 
         // Reschedule notifications if enabled
         if (notificationsEnabled.value) {
-          final prayerTimes = await PrayerTimesService().getTodayPrayerTimes();
+          final prayerTimes = await service.getTodayPrayerTimes();
           if (prayerTimes != null) {
             await NotificationService().cancelAllNotifications();
             await NotificationService().scheduleAllPrayers(prayerTimes);
@@ -113,22 +109,10 @@ class SettingsScreen extends HookWidget {
 
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Location updated successfully!')),
-          );
-        }
-      } else {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Failed to get location. Please enable location services.',
-              ),
-            ),
+            const SnackBar(content: Text('Prayer time updated!')),
           );
         }
       }
-
-      isLoading.value = false;
     }
 
     Future<void> showPrayerTimes() async {
@@ -194,107 +178,51 @@ class SettingsScreen extends HookWidget {
             },
           ),
 
-          // const Divider(),
-
-          // // Location Section
-          // const ListTile(
-          //   title: Text(
-          //     'Location',
-          //     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          //   ),
-          // ),
-          // ListTile(
-          //   title: const Text('Current Location'),
-          //   subtitle: Text(locationName.value ?? 'Not set'),
-          //   leading: const Icon(Icons.location_on),
-          // ),
-          // ListTile(
-          //   title: const Text('Update Location'),
-          //   subtitle: const Text('Use GPS to get current location'),
-          //   leading: isLoading.value
-          //       ? const SizedBox(
-          //           width: 24,
-          //           height: 24,
-          //           child: CircularProgressIndicator(strokeWidth: 2),
-          //         )
-          //       : const Icon(Icons.my_location),
-          //   onTap: isLoading.value ? null : updateLocation,
-          // ),
-
           const Divider(),
 
-          // Calculation Method Section
+          // Manual Prayer Times Configuration Section
           const ListTile(
             title: Text(
-              'Prayer Time Calculation',
+              'Configure Prayer Times',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
           ),
-          ListTile(
-            title: const Text('Calculation Method'),
-            subtitle: Text(_getMethodDisplayName(calculationMethod.value)),
-            leading: const Icon(Icons.calculate),
-            onTap: () {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Select Calculation Method'),
-                  content: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: PrayerTimesService()
-                          .getAvailableMethods()
-                          .map(
-                            (method) => RadioListTile<String>(
-                              title: Text(method['name']!),
-                              value: method['id']!,
-                              groupValue: calculationMethod.value,
-                              onChanged: (value) {
-                                if (value != null) {
-                                  updateCalculationMethod(value);
-                                  Navigator.pop(context);
-                                }
-                              },
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ),
-                ),
-              );
-            },
+          _buildManualTimeTile(
+            context,
+            name: 'Fajr',
+            time: fajrTime.value,
+            onTap: () => pickPrayerTime(PrayerTimesService.keyManualFajr, fajrTime),
+          ),
+          _buildManualTimeTile(
+            context,
+            name: 'Dhuhr',
+            time: dhuhrTime.value,
+            onTap: () => pickPrayerTime(PrayerTimesService.keyManualDhuhr, dhuhrTime),
+          ),
+          _buildManualTimeTile(
+            context,
+            name: 'Asr',
+            time: asrTime.value,
+            onTap: () => pickPrayerTime(PrayerTimesService.keyManualAsr, asrTime),
+          ),
+          _buildManualTimeTile(
+            context,
+            name: 'Maghrib',
+            time: maghribTime.value,
+            onTap: () => pickPrayerTime(PrayerTimesService.keyManualMaghrib, maghribTime),
+          ),
+          _buildManualTimeTile(
+            context,
+            name: 'Isha',
+            time: ishaTime.value,
+            onTap: () => pickPrayerTime(PrayerTimesService.keyManualIsha, ishaTime),
           ),
           ListTile(
-            title: const Text('View Prayer Times'),
-            subtitle: const Text('See today\'s prayer times'),
+            title: const Text('View All Times'),
+            subtitle: const Text('See today\'s full prayer times schedule'),
             leading: const Icon(Icons.access_time),
             onTap: showPrayerTimes,
           ),
-
-          const Divider(),
-
-          // Prayer History Section
-          const ListTile(
-            title: Text(
-              'Prayer History',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-          ),
-          ListTile(
-            title: const Text('View Prayer History'),
-            subtitle: const Text('Track your prayer completion over time'),
-            leading: const Icon(Icons.history),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const PrayerHistoryScreen(),
-                ),
-              );
-            },
-          ),
-       
 
           const Divider(),
 
@@ -317,6 +245,39 @@ class SettingsScreen extends HookWidget {
     );
   }
 
+  Widget _buildManualTimeTile(
+    BuildContext context, {
+    required String name,
+    required String time,
+    required VoidCallback onTap,
+  }) {
+    final parts = time.split(':');
+    final hour = int.parse(parts[0]);
+    final minute = int.parse(parts[1]);
+    final timeOfDay = TimeOfDay(hour: hour, minute: minute);
+    final formattedTime = timeOfDay.format(context);
+
+    return ListTile(
+      title: Text(name),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            formattedTime,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Icon(Icons.edit, size: 18),
+        ],
+      ),
+      leading: const Icon(Icons.access_time),
+      onTap: onTap,
+    );
+  }
+
   Widget _buildTimeRow(String name, DateTime time) {
     final timeStr =
         '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
@@ -330,14 +291,5 @@ class SettingsScreen extends HookWidget {
         ],
       ),
     );
-  }
-
-  String _getMethodDisplayName(String id) {
-    final methods = PrayerTimesService().getAvailableMethods();
-    final method = methods.firstWhere(
-      (m) => m['id'] == id,
-      orElse: () => {'name': 'Muslim World League'},
-    );
-    return method['name']!;
   }
 }
